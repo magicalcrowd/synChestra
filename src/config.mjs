@@ -1,0 +1,213 @@
+const DEFAULT_TIMEOUT_MS = 8000;
+const DEFAULT_PLAYBACK_SYNC_INTERVAL_MS = 50;
+const MIN_PLAYBACK_SYNC_INTERVAL_MS = 10;
+const MAX_PLAYBACK_SYNC_INTERVAL_MS = 1000;
+const DEFAULT_MAX_SMOOTH_PLAYBACK_DRIFT_MS = 100;
+const MIN_MAX_SMOOTH_PLAYBACK_DRIFT_MS = 10;
+const MAX_SMOOTH_PLAYBACK_DRIFT_MS = 500;
+const DEFAULT_MAX_PLAYBACK_RATE_ADJUSTMENT_PERCENT = 1;
+const MIN_PLAYBACK_RATE_ADJUSTMENT_PERCENT = 0.1;
+const MAX_PLAYBACK_RATE_ADJUSTMENT_PERCENT = 2;
+const DEFAULT_OUTPUT_LATENCY_REFRESH_INTERVAL_MS = 30000;
+const DEFAULT_MAX_OUTPUT_LATENCY_COMPENSATION_MS = 100;
+const MAX_OUTPUT_LATENCY_COMPENSATION_MS = 1000;
+const MIN_OUTPUT_LATENCY_REFRESH_INTERVAL_MS = 1000;
+
+export async function loadConfig() {
+  const response = await fetch('./config.json', { cache: 'no-store' });
+  if (!response.ok) throw new Error(`Impossibile caricare config.json (HTTP ${response.status}).`);
+
+  let config;
+  try {
+    config = await response.json();
+  } catch {
+    throw new Error('config.json non contiene JSON valido.');
+  }
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw new Error('config.json deve contenere un oggetto JSON.');
+  }
+
+  const stationCatalogUrl = requireString(config.stationCatalogUrl, 'stationCatalogUrl');
+  if (!stationCatalogUrl) {
+    throw new Error('config.json richiede stationCatalogUrl per il catalogo delle stazioni.');
+  }
+  const customTimeSource = config.customTimeSource === undefined
+    ? null
+    : validateCustomTimeSource(config.customTimeSource);
+  const configuredTimeSources = config.timeSources === undefined ? [] : validateTimeSources(config.timeSources);
+  if (config.customTimeSourceOnly !== undefined && typeof config.customTimeSourceOnly !== 'boolean') {
+    throw new Error('Il valore "customTimeSourceOnly" in config.json deve essere true o false.');
+  }
+  const customTimeSourceOnly = config.customTimeSourceOnly === true;
+  const timeSources = customTimeSourceOnly
+    ? (customTimeSource ? [customTimeSource] : [])
+    : customTimeSource
+      ? [customTimeSource, ...configuredTimeSources]
+      : configuredTimeSources;
+  if (config.localFallback !== undefined && typeof config.localFallback !== 'boolean') {
+    throw new Error('Il valore "localFallback" in config.json deve essere true o false.');
+  }
+  if (config.resyncOnTrackChangeOnly !== undefined && typeof config.resyncOnTrackChangeOnly !== 'boolean') {
+    throw new Error('Il valore "resyncOnTrackChangeOnly" in config.json deve essere true o false.');
+  }
+  if (config.allowStationSwitch !== undefined && typeof config.allowStationSwitch !== 'boolean') {
+    throw new Error('Il valore "allowStationSwitch" in config.json deve essere true o false.');
+  }
+  const stationQueryParam = config.stationQueryParam === undefined
+    ? null
+    : requireString(config.stationQueryParam, 'stationQueryParam');
+  if (config.stationQueryParam !== undefined && !stationQueryParam) {
+    throw new Error('Il valore "stationQueryParam" in config.json deve essere una stringa non vuota.');
+  }
+  const audioOffsetQueryParam = config.audioOffsetQueryParam === undefined
+    ? null
+    : requireString(config.audioOffsetQueryParam, 'audioOffsetQueryParam');
+  if (config.audioOffsetQueryParam !== undefined && !audioOffsetQueryParam) {
+    throw new Error('Il valore "audioOffsetQueryParam" in config.json deve essere una stringa non vuota.');
+  }
+  if (config.useManifestDurations !== undefined && typeof config.useManifestDurations !== 'boolean') {
+    throw new Error('Il valore "useManifestDurations" in config.json deve essere true o false.');
+  }
+  if (config.showPlaybackCalibration !== undefined && typeof config.showPlaybackCalibration !== 'boolean') {
+    throw new Error('Il valore "showPlaybackCalibration" in config.json deve essere true o false.');
+  }
+  if (config.showPlaybackOffsetControls !== undefined && typeof config.showPlaybackOffsetControls !== 'boolean') {
+    throw new Error('Il valore "showPlaybackOffsetControls" in config.json deve essere true o false.');
+  }
+  if (config.showSyncDiagnostics !== undefined && typeof config.showSyncDiagnostics !== 'boolean') {
+    throw new Error('Il valore "showSyncDiagnostics" in config.json deve essere true o false.');
+  }
+  if (config.enableOutputLatencyCompensation !== undefined
+    && typeof config.enableOutputLatencyCompensation !== 'boolean') {
+    throw new Error('Il valore "enableOutputLatencyCompensation" in config.json deve essere true o false.');
+  }
+  const maxOutputLatencyCompensationMs = boundedNumber(
+    config.maxOutputLatencyCompensationMs,
+    DEFAULT_MAX_OUTPUT_LATENCY_COMPENSATION_MS,
+    0,
+    MAX_OUTPUT_LATENCY_COMPENSATION_MS,
+    'maxOutputLatencyCompensationMs',
+  );
+  const outputLatencyRefreshIntervalMs = boundedNumber(
+    config.outputLatencyRefreshIntervalMs,
+    DEFAULT_OUTPUT_LATENCY_REFRESH_INTERVAL_MS,
+    MIN_OUTPUT_LATENCY_REFRESH_INTERVAL_MS,
+    Number.MAX_SAFE_INTEGER,
+    'outputLatencyRefreshIntervalMs',
+  );
+  const playbackSyncIntervalMs = boundedNumber(
+    config.playbackSyncIntervalMs,
+    DEFAULT_PLAYBACK_SYNC_INTERVAL_MS,
+    MIN_PLAYBACK_SYNC_INTERVAL_MS,
+    MAX_PLAYBACK_SYNC_INTERVAL_MS,
+    'playbackSyncIntervalMs',
+  );
+  const maxSmoothPlaybackDriftMs = boundedNumber(
+    config.maxSmoothPlaybackDriftMs,
+    DEFAULT_MAX_SMOOTH_PLAYBACK_DRIFT_MS,
+    MIN_MAX_SMOOTH_PLAYBACK_DRIFT_MS,
+    MAX_SMOOTH_PLAYBACK_DRIFT_MS,
+    'maxSmoothPlaybackDriftMs',
+  );
+  const maxPlaybackRateAdjustmentPercent = boundedNumber(
+    config.maxPlaybackRateAdjustmentPercent,
+    DEFAULT_MAX_PLAYBACK_RATE_ADJUSTMENT_PERCENT,
+    MIN_PLAYBACK_RATE_ADJUSTMENT_PERCENT,
+    MAX_PLAYBACK_RATE_ADJUSTMENT_PERCENT,
+    'maxPlaybackRateAdjustmentPercent',
+  );
+
+  return {
+    stationCatalogUrl,
+    allowStationSwitch: config.allowStationSwitch === true,
+    stationQueryParam,
+    audioOffsetQueryParam,
+    useManifestDurations: config.useManifestDurations === true,
+    showPlaybackCalibration: config.showPlaybackCalibration !== false,
+    showPlaybackOffsetControls: config.showPlaybackOffsetControls !== false,
+    showSyncDiagnostics: config.showSyncDiagnostics !== false,
+    timeSources,
+    customTimeSourceOnly,
+    resyncOnTrackChangeOnly: config.resyncOnTrackChangeOnly === true,
+    resyncIntervalMs: positiveNumber(config.resyncIntervalMs, 30000),
+    requestTimeoutMs: positiveNumber(config.requestTimeoutMs, DEFAULT_TIMEOUT_MS),
+    maxOutputLatencyCompensationMs,
+    outputLatencyRefreshIntervalMs,
+    enableOutputLatencyCompensation: config.enableOutputLatencyCompensation !== false,
+    playbackSyncIntervalMs,
+    maxSmoothPlaybackDriftMs,
+    maxPlaybackRateAdjustmentPercent,
+    localFallback: config.localFallback !== false,
+  };
+}
+
+function requireString(value, name) {
+  if (value === undefined || value === null) return '';
+  if (typeof value !== 'string') throw new Error(`Il valore "${name}" in config.json deve essere una stringa.`);
+  return value.trim();
+}
+
+function positiveNumber(value, fallback) {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function boundedNumber(value, fallback, minimum, maximum, name) {
+  if (value === undefined) return fallback;
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new Error(
+      `Il valore "${name}" in config.json deve essere un numero tra ${minimum} e ${maximum}.`,
+    );
+  }
+  return value;
+}
+
+function validateTimeSources(value) {
+  if (!Array.isArray(value)) throw new Error('timeSources in config.json deve essere una lista ordinata.');
+  return value.map((source, index) => validateTimeSource(source, `timeSources[${index}]`));
+}
+
+function validateCustomTimeSource(value) {
+  const label = 'customTimeSource';
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} deve essere un oggetto.`);
+  }
+
+  const url = requireString(value.url, `${label}.url`);
+  if (!url) return null;
+
+  return validateTimeSource({
+    name: value.name ?? 'synChestra · UTC',
+    url,
+    responsePath: value.responsePath ?? 'utc',
+    timeZonePath: value.timeZonePath ?? '',
+    responseFormat: value.responseFormat ?? 'json',
+  }, label);
+}
+
+function validateTimeSource(source, label) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    throw new Error(`${label} deve essere un oggetto.`);
+  }
+
+  const name = requireString(source.name, `${label}.name`);
+  const url = requireString(source.url, `${label}.url`);
+  const responsePath = requireString(source.responsePath, `${label}.responsePath`);
+  const timeZonePath = requireString(source.timeZonePath ?? '', `${label}.timeZonePath`);
+  const responseFormat = source.responseFormat ?? 'json';
+  if (!name || !url) throw new Error(`${label} richiede name e url.`);
+  if (responseFormat !== 'json' && responseFormat !== 'text') {
+    throw new Error(`${label}.responseFormat deve essere "json" o "text".`);
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error(`${label}.url deve essere un URL assoluto valido.`);
+  }
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    throw new Error(`${label}.url deve usare HTTP o HTTPS.`);
+  }
+
+  return { name, url: parsedUrl.href, responsePath, timeZonePath, responseFormat };
+}
