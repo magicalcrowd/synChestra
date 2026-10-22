@@ -111,9 +111,41 @@ test('normalizza i campi delle tracce e non richiede le durate', () => {
 
 test('carica il catalogo JSON', async (t) => {
   mockFetch(t, catalogResponse(JSON.stringify({ stations: [validStation] })));
-  const stations = await loadStationCatalog('https://radio.example/assets/stations.json');
-  assert.equal(stations.length, 1);
-  assert.equal(stations[0].tracks[0].audioUrl, 'https://radio.example/assets/audio/one.mp3');
+  const catalog = await loadStationCatalog('https://radio.example/assets/stations.json');
+  assert.equal(catalog.stations.length, 1);
+  assert.equal(catalog.stations[0].tracks[0].audioUrl, 'https://radio.example/assets/audio/one.mp3');
+  assert.equal(catalog.usedFallback, false);
+});
+
+test('usa il catalogo di fallback se la sorgente principale fallisce', async (t) => {
+  let requestCount = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    requestCount += 1;
+    return requestCount === 1
+      ? catalogResponse('', 503)
+      : catalogResponse(JSON.stringify({ stations: [validStation] }));
+  });
+
+  const catalog = await loadStationCatalog(
+    'https://api.example.com/stations',
+    8000,
+    'https://radio.example/fallback/stations.json',
+  );
+  assert.equal(catalog.stations[0].tracks[0].audioUrl, 'https://radio.example/fallback/audio/one.mp3');
+  assert.equal(catalog.usedFallback, true);
+});
+
+test('riporta gli errori di entrambe le sorgenti se falliscono', async (t) => {
+  let requestCount = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    requestCount += 1;
+    return catalogResponse('', requestCount === 1 ? 503 : 404);
+  });
+
+  await assert.rejects(
+    loadStationCatalog('/stations', 8000, '/fallback.json'),
+    /sorgente principale \(Catalogo delle stazioni non disponibile \(HTTP 503\)\.\) o dal fallback \(Catalogo delle stazioni non disponibile \(HTTP 404\)\.\)/,
+  );
 });
 
 test('segnala URL assente, errori HTTP, JSON invalido e timeout', async (t) => {

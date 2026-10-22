@@ -51,6 +51,7 @@ test('carica e normalizza la configurazione con i valori predefiniti', async (t)
 
   assert.deepEqual(await loadConfig(), {
     stationCatalogUrl: './catalog.json',
+    stationCatalogFallbackUrl: null,
     allowStationSwitch: true,
     stationQueryParam: null,
     audioOffsetQueryParam: null,
@@ -92,6 +93,7 @@ test('accetta una lista vuota di sorgenti e fallback locale disattivato', async 
   const config = await loadConfig();
   assert.deepEqual(config.timeSources, []);
   assert.equal(config.stationCatalogUrl, './stations.json');
+  assert.equal(config.stationCatalogFallbackUrl, null);
   assert.equal(config.allowStationSwitch, false);
   assert.equal(config.customTimeSourceOnly, false);
   assert.equal(config.resyncOnTrackChangeOnly, false);
@@ -346,8 +348,22 @@ test('richiede un URL al catalogo delle stazioni', async (t) => {
   mockConfig(t, jsonResponse({ stationCatalogUrl: 42 }));
   await assert.rejects(loadConfig(), /stationCatalogUrl.*deve essere una stringa/);
 
+  mockConfig(t, jsonResponse({
+    stationCatalogUrl: './stations.json',
+    stationCatalogFallbackUrl: 42,
+  }));
+  await assert.rejects(loadConfig(), /stationCatalogFallbackUrl.*deve essere una stringa/);
+
   mockConfig(t, jsonResponse({ stations: [station], allowStationSwitch: 'true' }));
   await assert.rejects(loadConfig(), /allowStationSwitch.*true o false/);
+});
+
+test('carica e normalizza l’URL opzionale di fallback del catalogo', async (t) => {
+  mockConfig(t, jsonResponse({
+    stationCatalogUrl: './stations.json',
+    stationCatalogFallbackUrl: '  https://api.example.com/stations  ',
+  }));
+  assert.equal((await loadConfig()).stationCatalogFallbackUrl, 'https://api.example.com/stations');
 });
 
 test('valida e normalizza il parametro URL per la selezione della stazione', async (t) => {

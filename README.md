@@ -14,11 +14,14 @@ Edit [`config.json`](./config.json) to configure global settings and time source
 
 ## Configure stations
 
-Set `stationCatalogUrl` in `config.json` to the JSON file containing the stations. Each entry in its `stations` array requires a unique `id`, `name`, `description`, an ISO 8601 `timelineStartsAt` with a timezone, and a non-empty `tracks` array. Set `repeat: true` to repeat the playlist indefinitely; otherwise playback ends after the last track.
+Set `stationCatalogUrl` in `config.json` to the JSON file containing the stations or to an API endpoint that returns the catalog as JSON. The API response must have the same shape as the file shown below: an object with a non-empty `stations` array. The endpoint must be reachable by the browser and allow cross-origin requests (CORS) when hosted on a different origin. Each entry in its `stations` array requires a unique `id`, `name`, `description`, an ISO 8601 `timelineStartsAt` with a timezone, and a non-empty `tracks` array. Set `repeat: true` to repeat the playlist indefinitely; otherwise playback ends after the last track.
+
+Optionally set `stationCatalogFallbackUrl` to a second JSON file or API URL. If loading or validating the primary catalog fails, synChestra tries this fallback; when both fail, the app reports both errors. The interface indicates when the fallback catalog is in use. Leave the value empty to disable fallback.
 
 ```json
 {
   "stationCatalogUrl": "stations.json",
+  "stationCatalogFallbackUrl": "",
   "stations": [
     {
       "id": "radio-one",

@@ -47,6 +47,7 @@ let tunedIn = false;
 let tuningPending = false;
 let tuningRequestId = 0;
 let config = null;
+let catalogFallbackUsed = false;
 let stationLoadId = 0;
 let playbackSyncTimer = null;
 let playbackSyncPositionKey = null;
@@ -70,7 +71,13 @@ let calibrationBaselineOffsetMs = 0;
 async function start() {
   try {
     config = await loadConfig();
-    config.stations = await loadStationCatalog(config.stationCatalogUrl, config.requestTimeoutMs);
+    const catalog = await loadStationCatalog(
+      config.stationCatalogUrl,
+      config.requestTimeoutMs,
+      config.stationCatalogFallbackUrl,
+    );
+    config.stations = catalog.stations;
+    catalogFallbackUsed = catalog.usedFallback;
   } catch (error) {
     elements['station-name'].textContent = 'Stazione non disponibile';
     elements['station-description'].textContent = 'Impossibile caricare la configurazione della stazione.';
@@ -287,10 +294,14 @@ async function loadStation(station) {
 }
 
 function renderManifest() {
-  elements['manifest-status'].textContent = 'SCALLETTA CARICATA';
+  elements['manifest-status'].textContent = catalogFallbackUsed
+    ? 'SCALLETTA CARICATA · FALLBACK'
+    : 'SCALLETTA CARICATA';
   elements['schedule-count'].textContent = String(manifest.tracks.length).padStart(2, '0');
   const repeatNote = manifest.repeat ? ' La scaletta si ripete indefinitamente.' : ' La scaletta non si ripete.';
-  elements['schedule-footnote'].textContent = `Inizio timeline: ${formatDateTime(Date.parse(manifest.timelineStartsAt))}.${repeatNote}`;
+  const fallbackNote = catalogFallbackUsed ? ' È in uso il catalogo di fallback.' : '';
+  elements['schedule-footnote'].textContent =
+    `Inizio timeline: ${formatDateTime(Date.parse(manifest.timelineStartsAt))}.${repeatNote}${fallbackNote}`;
   renderSchedule();
   elements['tune-button'].disabled = false;
   elements['configuration-error'].hidden = true;

@@ -1,6 +1,29 @@
-export async function loadStationCatalog(url, timeoutMs = 8000) {
+export async function loadStationCatalog(url, timeoutMs = 8000, fallbackUrl = null) {
   if (!url) throw new Error('Configura stationCatalogUrl in config.json.');
 
+  try {
+    return {
+      stations: await fetchStationCatalog(url, timeoutMs),
+      usedFallback: false,
+    };
+  } catch (primaryError) {
+    if (!fallbackUrl) throw primaryError;
+
+    try {
+      return {
+        stations: await fetchStationCatalog(fallbackUrl, timeoutMs),
+        usedFallback: true,
+      };
+    } catch (fallbackError) {
+      throw new Error(
+        `Impossibile caricare il catalogo delle stazioni dalla sorgente principale (${primaryError.message}) `
+        + `o dal fallback (${fallbackError.message}).`,
+      );
+    }
+  }
+}
+
+async function fetchStationCatalog(url, timeoutMs) {
   let response;
   try {
     response = await fetch(url, {

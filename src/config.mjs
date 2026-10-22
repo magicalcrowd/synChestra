@@ -31,6 +31,9 @@ export async function loadConfig() {
   if (!stationCatalogUrl) {
     throw new Error('config.json richiede stationCatalogUrl per il catalogo delle stazioni.');
   }
+  const stationCatalogFallbackUrl = config.stationCatalogFallbackUrl === undefined
+    ? null
+    : requireString(config.stationCatalogFallbackUrl, 'stationCatalogFallbackUrl') || null;
   const customTimeSource = config.customTimeSource === undefined
     ? null
     : validateCustomTimeSource(config.customTimeSource);
@@ -119,6 +122,7 @@ export async function loadConfig() {
 
   return {
     stationCatalogUrl,
+    stationCatalogFallbackUrl,
     allowStationSwitch: config.allowStationSwitch === true,
     stationQueryParam,
     audioOffsetQueryParam,

@@ -15,6 +15,7 @@
   },
   "customTimeSourceOnly": false,
   "stationCatalogUrl": "stations.json",
+  "stationCatalogFallbackUrl": "",
   "timeSources": [
     {
       "name": "TimeAPI.io · UTC",
